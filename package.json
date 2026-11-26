@@ -1,0 +1,18 @@
+{
+  "name": "ai-dev-studio",
+  "version": "1.0.0",
+  "description": "AI Dev Studio - Client-side AI coding assistant with GitHub push",
+  "scripts": {
+    "build": "echo 'Static assets ready in www/'",
+    "cap:sync": "npx cap sync android",
+    "cap:open": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/cli": "^6.2.0",
+    "@capacitor/app": "^6.0.0",
+    "@capacitor/status-bar": "^6.0.0",
+    "@capacitor/splash-screen": "^6.0.0"
+  }
+}
