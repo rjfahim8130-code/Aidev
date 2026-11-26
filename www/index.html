@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>AI Dev Studio</title>
+  <link rel="manifest" href="manifest.json" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <style>
+    :root { color-scheme: dark; }
+    body { background: #0f172a; color: #f8fafc; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .prose pre { background: #1e293b; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 12.5px; border: 1px solid #334155; }
+    .prose code { color: #38bdf8; background: #1e293b; padding: 1px 4px; border-radius: 4px; font-size: 0.9em; }
+    .prose pre code { background: transparent; padding: 0; }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+    .msg-user { background: linear-gradient(135deg, #0284c7, #0369a1); }
+    .msg-ai { background: #1e293b; border: 1px solid #334155; }
+    #sidebar { transition: transform 0.25s ease; }
+    .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  </style>
+</head>
+<body class="h-[100dvh] flex flex-col overflow-hidden">
+
+  <!-- Top Bar -->
+  <header class="bg-slate-900/95 backdrop-blur border-b border-slate-800 px-3 py-2.5 flex items-center gap-2 shrink-0 z-30">
+    <button onclick="toggleSidebar()" class="p-2.5 rounded-xl bg-slate-800 active:bg-slate-700 text-slate-200 text-lg leading-none">☰</button>
+    <div class="flex-1 min-w-0">
+      <div class="font-bold text-sky-400 text-sm truncate">AI Dev Studio</div>
+      <div id="activeRepoLabel" class="text-[10px] text-slate-500 truncate">কোনো রিপো সিলেক্ট নেই</div>
+    </div>
+    <button onclick="exportFullChat()" class="p-2.5 rounded-xl bg-slate-800 active:bg-slate-700 text-emerald-400 text-sm" title="পূর্ণ চ্যাট ডাউনলোড">📤</button>
+    <button onclick="openSettings()" class="p-2.5 rounded-xl bg-slate-800 active:bg-slate-700 text-slate-200" title="সেটিংস">⚙️</button>
+  </header>
+
+  <div class="flex-1 flex overflow-hidden relative">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="w-72 max-w-[85vw] bg-slate-900 border-r border-slate-800 flex flex-col absolute sm:static inset-y-0 left-0 z-40 -translate-x-full sm:translate-x-0 shadow-2xl sm:shadow-none">
+      <div class="p-3 border-b border-slate-800 space-y-2">
+        <button onclick="createNewChat()" class="w-full py-2.5 px-3 bg-sky-600 active:bg-sky-500 text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2">
+          + নতুন কনভারসেশন
+        </button>
+        <select id="repoSelector" onchange="changeActiveRepo()" class="w-full bg-slate-800 text-xs text-slate-200 border border-slate-700 rounded-xl px-3 py-2 focus:outline-none focus:border-sky-500">
+          <option value="">প্রজেক্ট / রিপো সিলেক্ট...</option>
+        </select>
+      </div>
+      <div id="chatList" class="flex-1 overflow-y-auto p-2 space-y-1"></div>
+      <div class="p-3 border-t border-slate-800 text-[10px] text-slate-500 text-center">
+        সব ডেটা শুধু আপনার ফোনে সংরক্ষিত
+      </div>
+    </aside>
+
+    <!-- Overlay for mobile sidebar -->
+    <div id="sidebarOverlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black/50 z-30 hidden sm:hidden"></div>
+
+    <!-- Chat Area -->
+    <main class="flex-1 flex flex-col bg-slate-950 w-full min-w-0">
+      <div id="messagesContainer" class="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4"></div>
+
+      <!-- Input -->
+      <div class="p-3 bg-slate-900 border-t border-slate-800 shrink-0 safe-bottom">
+        <div class="max-w-3xl mx-auto flex gap-2 items-end">
+          <textarea id="userInput" rows="2" placeholder="কোড লিখতে বলুন বা প্রশ্ন করুন..." class="flex-1 bg-slate-800 text-slate-100 text-sm rounded-2xl px-4 py-3 border border-slate-700 focus:outline-none focus:border-sky-500 resize-none leading-relaxed"></textarea>
+          <button id="sendBtn" onclick="sendMessage()" class="bg-sky-600 active:bg-sky-500 disabled:opacity-40 text-white w-12 h-12 rounded-2xl font-bold text-lg shrink-0 flex items-center justify-center">➤</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="fixed inset-0 bg-black/80 z-50 hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md max-h-[90dvh] overflow-y-auto p-5 space-y-5">
+      <div class="flex justify-between items-center">
+        <h2 class="text-lg font-bold text-white">সেটিংস</h2>
+        <button onclick="closeSettings()" class="text-slate-400 text-2xl leading-none">&times;</button>
+      </div>
+
+      <div class="space-y-3">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-sky-400">AI প্রোভাইডার</h3>
+        <div>
+          <label class="text-xs text-slate-400">Base URL</label>
+          <input id="aiBaseUrl" type="text" placeholder="https://api.deepseek.com/v1" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white" />
+        </div>
+        <div>
+          <label class="text-xs text-slate-400">API Key</label>
+          <input id="aiApiKey" type="password" placeholder="sk-..." class="w-full mt-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white" />
+        </div>
+        <div>
+          <label class="text-xs text-slate-400">Model</label>
+          <input id="aiModel" type="text" placeholder="deepseek-chat" class="w-full mt-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white" />
+        </div>
+      </div>
+
+      <div class="space-y-3 pt-2 border-t border-slate-800">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400">GitHub</h3>
+        <div>
+          <label class="text-xs text-slate-400">Personal Access Token (repo scope)</label>
+          <input id="ghToken" type="password" placeholder="ghp_..." class="w-full mt-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white" />
+        </div>
+        <button onclick="fetchGitHubRepos()" class="w-full py-2.5 bg-slate-800 active:bg-slate-700 border border-slate-600 rounded-xl text-sm text-emerald-400 font-medium">
+          🔄 রিপোজিটরি লোড করুন
+        </button>
+        <p class="text-[11px] text-slate-500 leading-relaxed">
+          GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token (repo পারমিশন দিন)। ফ্রি অ্যাকাউন্টেই কাজ করে।
+        </p>
+      </div>
+
+      <button onclick="saveSettings()" class="w-full py-3 bg-sky-600 active:bg-sky-500 text-white rounded-xl font-semibold">
+        সেভ করুন
+      </button>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="fixed bottom-24 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-sm px-4 py-2.5 rounded-full shadow-lg opacity-0 pointer-events-none transition-opacity z-50 max-w-[90vw] text-center"></div>
+
+  <script>
+    // ==================== SYSTEM PROMPT ====================
+    const SYSTEM_PROMPT = `You are an expert software developer and coding assistant.
+Whenever you generate or modify one or more project files, you MUST wrap EVERY complete file using this exact format so the client app can parse and push them:
+
+===FILE: path/to/filename.ext===
+\`\`\`language
+// full complete file content here (no placeholders)
+\`\`\`
+===END_FILE===
+
+Rules:
+- Always output complete, working files.
+- Use relative paths from project root (e.g. src/App.jsx, index.html, package.json).
+- You can output multiple files in one response.
+- Outside of the FILE blocks you may explain normally.`;
+
+    // ==================== STATE ====================
+    let state = {
+      settings: {
+        baseUrl: 'https://api.deepseek.com/v1',
+        apiKey: '',
+        model: 'deepseek-chat',
+        ghToken: ''
+      },
+      repos: [],
+      chats: [],
+      activeChatId: null
+    };
+
+    // ==================== INIT ====================
+    function loadState() {
+      try {
+        const s = localStorage.getItem('ads_settings');
+        if (s) state.settings = { ...state.settings, ...JSON.parse(s) };
+        const r = localStorage.getItem('ads_repos');
+        if (r) state.repos = JSON.parse(r);
+        const c = localStorage.getItem('ads_chats');
+        if (c) state.chats = JSON.parse(c);
+      } catch (e) { console.warn(e); }
+    }
+
+    function saveState() {
+      localStorage.setItem('ads_settings', JSON.stringify(state.settings));
+      localStorage.setItem('ads_repos', JSON.stringify(state.repos));
+      localStorage.setItem('ads_chats', JSON.stringify(state.chats));
+    }
+
+    function init() {
+      loadState();
+      if (state.chats.length === 0) createNewChat(true);
+      else {
+        state.activeChatId = state.chats[0].id;
+        renderAll();
+      }
+      // Enter to send (Shift+Enter for newline)
+      document.getElementById('userInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendMessage();
+        }
+      });
+    }
+
+    // ==================== UI HELPERS ====================
+    function toast(msg, ms = 2600) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.style.opacity = '1';
+      clearTimeout(window._toastT);
+      window._toastT = setTimeout(() => el.style.opacity = '0', ms);
+    }
+
+    function toggleSidebar() {
+      const sb = document.getElementById('sidebar');
+      const ov = document.getElementById('sidebarOverlay');
+      const open = sb.classList.contains('-translate-x-full');
+      sb.classList.toggle('-translate-x-full', !open);
+      ov.classList.toggle('hidden', !open);
+    }
+
+    function openSettings() {
+      document.getElementById('aiBaseUrl').value = state.settings.baseUrl || '';
+      document.getElementById('aiApiKey').value = state.settings.apiKey || '';
+      document.getElementById('aiModel').value = state.settings.model || '';
+      document.getElementById('ghToken').value = state.settings.ghToken || '';
+      const m = document.getElementById('settingsModal');
+      m.classList.remove('hidden');
+      m.classList.add('flex');
+    }
+
+    function closeSettings() {
+      const m = document.getElementById('settingsModal');
+      m.classList.add('hidden');
+      m.classList.remove('flex');
+    }
+
+    function saveSettings() {
+      state.settings.baseUrl = document.getElementById('aiBaseUrl').value.trim().replace(/\/$/, '');
+      state.settings.apiKey = document.getElementById('aiApiKey').value.trim();
+      state.settings.model = document.getElementById('aiModel').value.trim() || 'deepseek-chat';
+      state.settings.ghToken = document.getElementById('ghToken').value.trim();
+      saveState();
+      closeSettings();
+      toast('সেটিংস সেভ হয়েছে');
+    }
+
+    // ==================== REPOS ====================
+    async function fetchGitHubRepos() {
+      const token = document.getElementById('ghToken').value.trim() || state.settings.ghToken;
+      if (!token) return toast('আগে GitHub Token দিন');
+      try {
+        toast('রিপো লোড হচ্ছে...');
+        const res = await fetch('https://api.github.com/user/repos?per_page=100&sort=updated', {
+          headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' }
+        });
+        if (!res.ok) throw new Error('টোকেন ভুল বা পারমিশন নেই');
+        const data = await res.json();
+        state.repos = data.map(r => ({ full_name: r.full_name, default_branch: r.default_branch || 'main' }));
+        state.settings.ghToken = token;
+        saveState();
+        renderRepoDropdown();
+        toast(state.repos.length + 'টি রিপোজিটরি লোড হয়েছে');
+      } catch (e) {
+        toast('এরর: ' + e.message);
+      }
+    }
+
+    function renderRepoDropdown() {
+      const sel = document.getElementById('repoSelector');
+      const chat = getActiveChat();
+      sel.innerHTML = '<option value="">প্রজেক্ট / রিপো সিলেক্ট...</option>';
+      state.repos.forEach(repo => {
+        const opt = document.createElement('option');
+        opt.value = repo.full_name;
+        opt.textContent = repo.full_name;
+        if (chat && chat.repo === repo.full_name) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      updateRepoLabel();
+    }
+
+    function changeActiveRepo() {
+      const chat = getActiveChat();
+      if (!chat) return;
+      chat.repo = document.getElementById('repoSelector').value;
+      saveState();
+      updateRepoLabel();
+      renderChatList();
+    }
+
+    function updateRepoLabel() {
+      const chat = getActiveChat();
+      const el = document.getElementById('activeRepoLabel');
+      el.textContent = (chat && chat.repo) ? chat.repo : 'কোনো রিপো সিলেক্ট নেই';
+    }
+
+    // ==================== CHATS ====================
+    function createNewChat(silent) {
+      const newChat = {
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+        title: 'নতুন কনভারসেশন',
+        repo: '',
+        messages: [],
+        createdAt: Date.now()
+      };
+      state.chats.unshift(newChat);
+      state.activeChatId = newChat.id;
+      saveState();
+      renderAll();
+      if (!silent) toast('নতুন কনভারসেশন তৈরি হয়েছে');
+    }
+
+    function getActiveChat() {
+      return state.chats.find(c => c.id === state.activeChatId);
+    }
+
+    function selectChat(id) {
+      state.activeChatId = id;
+      renderAll();
+      if (window.innerWidth < 640) toggleSidebar();
+    }
+
+    function deleteChat(e, id) {
+      e.stopPropagation();
+      if (!confirm('এই কনভারসেশন মুছে ফেলবেন?')) return;
+      state.chats = state.chats.filter(c => c.id !== id);
+      if (state.chats.length === 0) createNewChat(true);
+      else if (state.activeChatId === id) state.activeChatId = state.chats[0].id;
+      saveState();
+      renderAll();
+    }
+
+    function renderChatList() {
+      const list = document.getElementById('chatList');
+      list.innerHTML = '';
+      state.chats.forEach(chat => {
+        const isActive = chat.id === state.activeChatId;
+        const div = document.createElement('div');
+        div.onclick = () => selectChat(chat.id);
+        div.className = `p-3 rounded-xl cursor-pointer flex justify-between items-start gap-2 text-sm ${isActive ? 'bg-sky-600/20 text-sky-300 border border-sky-700/50' : 'text-slate-300 hover:bg-slate-800/70'}`;
+        div.innerHTML = `
+          <div class="min-w-0 flex-1">
+            <div class="font-medium truncate">${escapeHtml(chat.title)}</div>
+            ${chat.repo ? `<div class="text-[10px] text-slate-500 truncate mt-0.5">📁 ${escapeHtml(chat.repo)}</div>` : ''}
+          </div>
+          <button onclick="deleteChat(event, '${chat.id}')" class="text-slate-500 hover:text-red-400 px-1 shrink-0 text-base leading-none">×</button>
+        `;
+        list.appendChild(div);
+      });
+    }
+
+    function renderAll() {
+      renderRepoDropdown();
+      renderChatList();
+      renderMessages();
+      updateRepoLabel();
+    }
+
+    // ==================== FILE PARSER ====================
+    function extractFiles(text) {
+      const files = [];
+      // Support both ```language and plain content
+      const regex = /===FILE:\s*(.+?)===\s*(?:```[\w+-]*\n)?([\s\S]*?)(?:```\s*)?===END_FILE===/gi;
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        let content = match[2].trim();
+        // Remove trailing ``` if still present
+        if (content.endsWith('```')) content = content.slice(0, -3).trim();
+        files.push({ path: match[1].trim(), content });
+      }
+      return files;
+    }
+
+    // ==================== RENDER MESSAGES ====================
+    function escapeHtml(str) {
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function renderMessages() {
+      const container = document.getElementById('messagesContainer');
+      const chat = getActiveChat();
+      if (!chat || chat.messages.length === 0) {
+        container.innerHTML = `
+          <div class="text-center text-slate-500 text-sm mt-16 px-4 leading-relaxed">
+            <div class="text-4xl mb-3">🚀</div>
+            <p>সেটিংসে API Key ও GitHub Token যোগ করুন।</p>
+            <p class="mt-2">ওপরের ড্রপডাউন থেকে রিপো সিলেক্ট করে কোড লিখতে বলুন।</p>
+            <p class="mt-4 text-xs text-slate-600">প্রতিটি কনভারসেশন আলাদা — ডেটা মিশে না।</p>
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = '';
+      chat.messages.forEach((msg, idx) => {
+        const isUser = msg.role === 'user';
+        const wrapper = document.createElement('div');
+        wrapper.className = `flex flex-col ${isUser ? 'items-end' : 'items-start'}`;
+
+        const bubble = document.createElement('div');
+        bubble.className = `max-w-[92%] sm:max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser ? 'msg-user text-white' : 'msg-ai text-slate-200 prose prose-invert max-w-none'}`;
+
+        if (isUser) {
+          bubble.innerHTML = escapeHtml(msg.content).replace(/\n/g, '<br>');
+        } else {
+          try {
+            bubble.innerHTML = marked.parse(msg.content);
+          } catch {
+            bubble.textContent = msg.content;
+          }
+        }
+        wrapper.appendChild(bubble);
+
+        // Action bar for AI messages
+        if (!isUser) {
+          const files = extractFiles(msg.content);
+          const actions = document.createElement('div');
+          actions.className = 'mt-2 flex flex-wrap gap-1.5 items-center';
+
+          // Always allow download of this message
+          actions.innerHTML = `
+            <button onclick="downloadMessage(${idx})" class="px-2.5 py-1 bg-slate-800 border border-slate-600 text-slate-300 text-[11px] rounded-lg">📄 মেসেজ .txt</button>
+          `;
+
+          if (files.length > 0) {
+            actions.innerHTML += `
+              <span class="text-[11px] text-slate-500 ml-1">${files.length} ফাইল</span>
+              <button onclick="downloadZip(${idx})" class="px-2.5 py-1 bg-slate-800 border border-slate-600 text-slate-200 text-[11px] rounded-lg">📦 ZIP</button>
+              <button onclick="pushToGitHub(${idx})" class="px-2.5 py-1 bg-emerald-700 active:bg-emerald-600 text-white text-[11px] font-medium rounded-lg">🚀 Push to GitHub</button>
+            `;
+          }
+          wrapper.appendChild(actions);
+        }
+
+        container.appendChild(wrapper);
+      });
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // ==================== SEND MESSAGE ====================
+    async function sendMessage() {
+      const inputEl = document.getElementById('userInput');
+      const text = inputEl.value.trim();
+      if (!text) return;
+      if (!state.settings.apiKey) {
+        toast('সেটিংসে AI API Key দিন');
+        openSettings();
+        return;
+      }
+
+      const chat = getActiveChat();
+      if (!chat) return;
+
+      if (chat.messages.length === 0) {
+        chat.title = text.slice(0, 32) + (text.length > 32 ? '…' : '');
+      }
+
+      chat.messages.push({ role: 'user', content: text });
+      inputEl.value = '';
+      saveState();
+      renderChatList();
+      renderMessages();
+
+      const sendBtn = document.getElementById('sendBtn');
+      sendBtn.disabled = true;
+      sendBtn.textContent = '…';
+
+      try {
+        const apiMessages = [
+          { role: 'system', content: SYSTEM_PROMPT },
+          ...chat.messages.map(m => ({ role: m.role, content: m.content }))
+        ];
+
+        const res = await fetch(`${state.settings.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${state.settings.apiKey}`
+          },
+          body: JSON.stringify({
+            model: state.settings.model,
+            messages: apiMessages,
+            temperature: 0.3
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error?.message || data.message || 'API Error ' + res.status);
+
+        const reply = data.choices?.[0]?.message?.content || 'কোনো উত্তর পাইনি';
+        chat.messages.push({ role: 'assistant', content: reply });
+        saveState();
+        renderMessages();
+      } catch (err) {
+        toast('এরর: ' + err.message);
+        // remove the last user message on hard failure? keep it for retry
+      } finally {
+        sendBtn.disabled = false;
+        sendBtn.textContent = '➤';
+      }
+    }
+
+    // ==================== DOWNLOADS ====================
+    function downloadMessage(msgIndex) {
+      const chat = getActiveChat();
+      const msg = chat.messages[msgIndex];
+      const blob = new Blob([msg.content], { type: 'text/plain;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `message-${msgIndex + 1}-${msg.role}.txt`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast('মেসেজ ডাউনলোড হয়েছে');
+    }
+
+    async function downloadZip(msgIndex) {
+      const chat = getActiveChat();
+      const files = extractFiles(chat.messages[msgIndex].content);
+      if (files.length === 0) return toast('কোনো ফাইল পাওয়া যায়নি');
+
+      const zip = new JSZip();
+      files.forEach(f => zip.file(f.path, f.content));
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      const name = chat.repo ? chat.repo.split('/')[1] : 'project';
+      a.download = `${name}-files.zip`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast('ZIP ডাউনলোড হয়েছে');
+    }
+
+    function exportFullChat() {
+      const chat = getActiveChat();
+      if (!chat || chat.messages.length === 0) return toast('এক্সপোর্ট করার মতো কিছু নেই');
+
+      let md = `# ${chat.title}\n\n`;
+      md += `**Repository:** ${chat.repo || 'None'}\n`;
+      md += `**Exported:** ${new Date().toLocaleString()}\n\n---\n\n`;
+
+      chat.messages.forEach(m => {
+        md += `### ${m.role === 'user' ? '👤 User' : '🤖 AI'}\n\n${m.content}\n\n---\n\n`;
+      });
+
+      const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${chat.title.replace(/[^\w\u0980-\u09FF]+/g, '_').slice(0, 40)}.md`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast('পূর্ণ চ্যাট ডাউনলোড হয়েছে');
+    }
+
+    // ==================== GITHUB PUSH ====================
+    async function pushToGitHub(msgIndex) {
+      const chat = getActiveChat();
+      if (!chat.repo) return toast('আগে রিপো সিলেক্ট করুন');
+      if (!state.settings.ghToken) return toast('GitHub Token নেই');
+
+      const files = extractFiles(chat.messages[msgIndex].content);
+      if (files.length === 0) return toast('পুশ করার মতো ফাইল নেই');
+
+      if (!confirm(`${chat.repo}-এ ${files.length}টি ফাইল পুশ করবেন?`)) return;
+
+      toast('পুশ শুরু হয়েছে...');
+      let success = 0;
+      let failed = [];
+
+      for (const file of files) {
+        try {
+          const apiUrl = `https://api.github.com/repos/${chat.repo}/contents/${file.path}`;
+
+          // Get existing SHA if file exists
+          let sha = null;
+          const checkRes = await fetch(apiUrl, {
+            headers: { Authorization: `Bearer ${state.settings.ghToken}`, Accept: 'application/vnd.github+json' }
+          });
+          if (checkRes.ok) {
+            const existing = await checkRes.json();
+            sha = existing.sha;
+          }
+
+          // UTF-8 safe base64
+          const contentBase64 = btoa(unescape(encodeURIComponent(file.content)));
+
+          const body = {
+            message: `Update ${file.path} via AI Dev Studio`,
+            content: contentBase64,
+            branch: state.repos.find(r => r.full_name === chat.repo)?.default_branch || 'main'
+          };
+          if (sha) body.sha = sha;
+
+          const putRes = await fetch(apiUrl, {
+            method: 'PUT',
+            headers: {
+              Authorization: `Bearer ${state.settings.ghToken}`,
+              Accept: 'application/vnd.github+json',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
+          });
+
+          if (!putRes.ok) {
+            const err = await putRes.json();
+            throw new Error(err.message || putRes.status);
+          }
+          success++;
+        } catch (e) {
+          failed.push(`${file.path}: ${e.message}`);
+        }
+      }
+
+      if (failed.length === 0) {
+        toast(`✅ ${success}টি ফাইল সফলভাবে পুশ হয়েছে`);
+      } else {
+        toast(`⚠️ ${success} সফল, ${failed.length} ব্যর্থ`);
+        console.warn(failed);
+        alert('কিছু ফাইল ব্যর্থ:\n' + failed.join('\n'));
+      }
+    }
+
+    // ==================== START ====================
+    init();
+  </script>
+</body>
+</html>
